@@ -1,5 +1,5 @@
-use bevy::prelude::Vec3;
-use bytemuck::{Pod, Zeroable};
+use bevy::{prelude::Vec3, render::render_resource::ShaderType};
+use bevy::prelude::*;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub enum VoxelType {
@@ -8,14 +8,15 @@ pub enum VoxelType {
     Dirt
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
-pub struct Voxel(pub u32);
+#[derive(Clone, Copy, Debug, Default, ShaderType)]
+pub struct Voxel {
+    pub value: u32
+}
 
 impl Voxel {
     fn get_color(&self) -> (f32, f32, f32) {
         //
-        let voxel_type_num = self.0 >> 16;
+        let voxel_type_num = self.value >> 16;
         let voxel_type = match voxel_type_num {
             0 => VoxelType::Grass,
             _ => VoxelType::Dirt,
@@ -31,33 +32,36 @@ impl Voxel {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, ShaderType)]
 pub struct VoxelGrid {
-    pub voxels: Vec<Voxel>,
-    dim: usize,
+    dim: u32,
+    pub pos: Vec3,
+    #[size(runtime)]
+    voxels: Vec<Voxel>,
 }
 
 impl VoxelGrid {
-	pub fn new(dim: usize) -> Self {
+	pub fn new(dim: u32, pos: Vec3) -> Self {
         Self {
-            voxels: vec![Voxel(0); dim*dim*dim],
             dim,
+            pos,
+            voxels: vec![Voxel::default(); (dim*dim*dim) as usize],
         }
 	}
 
-    pub fn get(&self, x: usize, y: usize, z: usize) -> Option<&Voxel> {
+    pub fn get(&self, x: u32, y: u32, z: u32) -> Option<&Voxel> {
         let index = (x * self.dim * self.dim) + (y * self.dim) + z;
-        if index >= self.voxels.len() {
+        if index >= self.voxels.len() as u32 {
             return None;
         }
-        Some(&self.voxels[index])
+        Some(&self.voxels[index as usize])
     }
 
-    pub fn get_mut(&mut self, x: usize, y: usize, z: usize) -> Option<&mut Voxel> {
+    pub fn get_mut(&mut self, x: u32, y: u32, z: u32) -> Option<&mut Voxel> {
         let index = (x * self.dim * self.dim) + (y * self.dim) + z;
-        if index >= self.voxels.len() {
+        if index >= self.voxels.len()  as u32{
             return None;
         }
-        Some(&mut self.voxels[index])
+        Some(&mut self.voxels[index as usize])
     }
 }
