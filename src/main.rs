@@ -33,7 +33,7 @@ const SCREEN_SIZE: (u32, u32) = (1920, 1080);
 const WORKGROUP_SIZE: u32 = 8;
 
 fn create_perspective_projection_matrix(aspect_ratio : f32, fov : f32, near : f32, far : f32) -> Mat4 {
-    let tan_half_fov = f32::tan(fov / 2.0);
+    let tan_half_fov = f32::tan(fov * 0.5 * 3.14159265 / 180.0);
     let sx = 1.0 / (aspect_ratio * tan_half_fov);
     let sy = 1.0 / tan_half_fov;
     let sz = -(far + near) / (far - near);
@@ -205,6 +205,33 @@ pub struct RaycastPipeline {
     update_pipeline: CachedComputePipelineId,
 }
 
+fn update_camera_gpu(
+    mut uniform_data: ResMut<CameraData>,
+    transform_query: Query<&Transform, With<FlyCam>>,
+) {
+    if let Ok(transform) = transform_query.get_single() {
+        println!("{:?}", transform);
+
+        uniform_data.camera_matrix = transform.compute_matrix();
+        uniform_data.view_matrix = transform.compute_matrix().inverse();
+        let perspective_matrix = create_perspective_projection_matrix(16.0 / 9.0, 60.0, 0.1, 1000.0);
+        uniform_data.perspective_matrix = perspective_matrix.clone();
+        uniform_data.inverse_perspective_matrix = perspective_matrix.inverse();
+    }
+}
+
+fn prepare_uniform_data(
+    mut commands: Commands,
+    uniform_data: ResMut<CameraData>,
+    render_device: Res<RenderDevice>,
+    render_queue: Res<RenderQueue>,
+) {
+    let mut buffer = UniformBuffer::<CameraData>::from(uniform_data.clone());
+    buffer.write_buffer(&render_device, &render_queue);
+
+    commands.insert_resource(VoxelGridUniform(buffer));
+}
+
 impl FromWorld for RaycastPipeline {
     fn from_world(world: &mut World) -> Self {
         let voxel_data_bind_group_layout = world
@@ -274,33 +301,6 @@ impl FromWorld for RaycastPipeline {
             update_pipeline,
         }
     }
-}
-
-fn update_camera_gpu(
-    mut uniform_data: ResMut<CameraData>,
-    transform_query: Query<&Transform, With<FlyCam>>,
-) {
-    if let Ok(transform) = transform_query.get_single() {
-        // println!("{:?}", transform);
-
-        uniform_data.camera_matrix = transform.compute_matrix();
-        uniform_data.view_matrix = transform.compute_matrix().inverse();
-        let perspective_matrix = create_perspective_projection_matrix(16.0 / 9.0, 90.0, 0.1, 1000.0);
-        uniform_data.perspective_matrix = perspective_matrix.clone();
-        uniform_data.inverse_perspective_matrix = perspective_matrix.inverse();
-    }
-}
-
-fn prepare_uniform_data(
-    mut commands: Commands,
-    uniform_data: ResMut<CameraData>,
-    render_device: Res<RenderDevice>,
-    render_queue: Res<RenderQueue>,
-) {
-    let mut buffer = UniformBuffer::<CameraData>::from(uniform_data.clone());
-    buffer.write_buffer(&render_device, &render_queue);
-
-    commands.insert_resource(VoxelGridUniform(buffer));
 }
 
 fn queue_bind_group(
