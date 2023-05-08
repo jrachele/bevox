@@ -93,11 +93,11 @@ fn setup(
         z: 0.0,
     };
 
-    let n = 128;
+    let n = 64;
     let r = (n - 1) as f32;
     let mut voxels = VoxelGrid::new(n, pos);
 
-    // Create a diagonal line for testing purposes
+    // Create a sphere for testing purposes
     for i in 0..n {
         for j in 0..n {
             for k in 0..n {
@@ -119,8 +119,6 @@ fn setup(
 
     let uniform = CameraData {
         camera_matrix: Mat4::default(),
-        view_matrix: Mat4::default(),
-        perspective_matrix: Mat4::default(),
         inverse_perspective_matrix: Mat4::default(),
     };
 
@@ -181,8 +179,6 @@ struct VoxelGridStorage(Arc<StorageBuffer<VoxelGrid>>);
 #[derive(Resource, Clone, ShaderType, ExtractResource)]
 struct CameraData {
     camera_matrix: Mat4,
-    view_matrix: Mat4,
-    perspective_matrix: Mat4,
     inverse_perspective_matrix: Mat4,
 }
 
@@ -210,12 +206,8 @@ fn update_camera_gpu(
     transform_query: Query<&Transform, With<FlyCam>>,
 ) {
     if let Ok(transform) = transform_query.get_single() {
-        println!("{:?}", transform);
-
         uniform_data.camera_matrix = transform.compute_matrix();
-        uniform_data.view_matrix = transform.compute_matrix().inverse();
         let perspective_matrix = create_perspective_projection_matrix(16.0 / 9.0, 60.0, 0.1, 1000.0);
-        uniform_data.perspective_matrix = perspective_matrix.clone();
         uniform_data.inverse_perspective_matrix = perspective_matrix.inverse();
     }
 }
