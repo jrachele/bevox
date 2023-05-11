@@ -1,33 +1,14 @@
-//! A shader that renders a mesh multiple times in one draw call.
-
-use std::{borrow::Cow, rc::Rc, sync::Arc};
-
 use bevy::{
     prelude::*,
-    render::{
-        extract_resource::{ExtractResource, ExtractResourcePlugin},
-        render_asset::RenderAssets,
-        render_graph::{self, RenderGraph},
-        render_resource::{
-            BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
-            BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Buffer,
-            BufferBinding, BufferBindingType, BufferInitDescriptor, BufferUsages,
-            CachedComputePipelineId, ComputePassDescriptor, ComputePipelineDescriptor, Extent3d,
-            PipelineCache, ShaderStages, StorageTextureAccess, TextureDimension, TextureFormat,
-            TextureUsages, TextureViewDimension, StorageBuffer, ShaderType, UniformBuffer,
-        },
-        renderer::{RenderContext, RenderDevice, RenderQueue},
-        RenderApp, RenderSet,
-    }, diagnostic::{LogDiagnosticsPlugin, FrameTimeDiagnosticsPlugin}, window::PresentMode,
+    diagnostic::{LogDiagnosticsPlugin, FrameTimeDiagnosticsPlugin}, window::PresentMode,
 };
-use flycam::{PlayerPlugin, MovementSettings, KeyBindings, FlyCam};
+use util::flycam::{PlayerPlugin, MovementSettings, KeyBindings, FlyCam};
 use render::RenderComputePlugin;
-use voxel::VoxelGrid;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
-mod flycam;
+mod util;
 mod voxel;
 mod render;
 

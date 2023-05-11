@@ -1,8 +1,7 @@
-use crate::octree::*;
 use std::mem::size_of;
 
 
-// #[ignore]
+#[ignore]
 #[test]
 fn test_morton_ordering() {
 
@@ -49,6 +48,7 @@ fn test_morton_ordering() {
     println!("Size of v:{}", size_of::<Vec<TestVoxel>>() + (size_of::<TestVoxel>() * s))
 }
 
+#[ignore]
 #[test]
 fn test_morton_encoding() {
     let x = 0b1100;

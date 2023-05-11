@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_graph::{RenderGraph, self};
@@ -9,13 +10,15 @@ use bevy::render::renderer::{RenderDevice, RenderQueue, RenderContext};
 use bevy::render::{RenderApp, RenderSet};
 use bevy::render::extract_resource::{ExtractResourcePlugin, ExtractResource};
 
-use crate::flycam::FlyCam;
+use crate::util::flycam::FlyCam;
 use crate::voxel::VoxelGrid;
 
-#[derive(Resource, Clone, ShaderType, ExtractResource)]
-struct CameraData {
+#[derive(Resource, Default, Clone, ShaderType, ExtractResource)]
+struct PlayerData {
     camera_matrix: Mat4,
     inverse_perspective_matrix: Mat4,
+    mouse_click: u32,
+    brush_size: u32,
 }
 
 #[derive(Resource, Default, Clone, ShaderType, ExtractResource)]
@@ -28,13 +31,13 @@ struct PhysicsData {
 struct VoxelGridStorage(Arc<StorageBuffer<VoxelGrid>>);
 
 #[derive(Resource)]
-struct VoxelGridUniform(UniformBuffer<CameraData>);
+struct PlayerDataUniform(UniformBuffer<PlayerData>);
 
 #[derive(Resource)]
-struct PhysicsUniform(UniformBuffer<PhysicsData>);
+struct PhysicsDataUniform(UniformBuffer<PhysicsData>);
 
 #[derive(Resource, Clone, Deref, ExtractResource)]
-struct RaycastImage(Handle<Image>);
+struct RaycastOutputImage(Handle<Image>);
 
 // Bind groups
 #[derive(Resource)]
@@ -60,18 +63,18 @@ pub struct RenderComputePlugin;
 impl Plugin for RenderComputePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(ExtractResourcePlugin::<VoxelGridStorage>::default());
-        app.add_plugin(ExtractResourcePlugin::<CameraData>::default());
+        app.add_plugin(ExtractResourcePlugin::<PlayerData>::default());
         app.add_plugin(ExtractResourcePlugin::<PhysicsData>::default());
-        app.add_plugin(ExtractResourcePlugin::<RaycastImage>::default());
+        app.add_plugin(ExtractResourcePlugin::<RaycastOutputImage>::default());
 
         app.add_startup_system(setup);
-        app.add_system(update_camera_gpu);
-        app.add_system(update_physics_gpu);
+        app.add_system(update_player_uniform);
+        app.add_system(update_physics_uniform);
         // app.register_type::<VoxelGrid>();
         let render_app = app.sub_app_mut(RenderApp);
         render_app
             .init_resource::<ComputePipeline>()
-            .add_system(prepare_uniform_data.in_set(RenderSet::Prepare))
+            .add_system(write_uniform_buffers.in_set(RenderSet::Prepare))
             .add_system(queue_bind_group.in_set(RenderSet::Queue));
 
         let mut render_graph = render_app.world.resource_mut::<RenderGraph>();
@@ -80,7 +83,7 @@ impl Plugin for RenderComputePlugin {
     }
 }
 const SCREEN_SIZE: (u32, u32) = (1920, 1080);
-const VOXEL_GRID_SIZE: u32 = 512u32;
+const VOXEL_GRID_SIZE: u32 = 128u32;
 const WORKGROUP_SIZE: u32 = 8;
 
 fn setup(
@@ -121,10 +124,7 @@ fn setup(
 
     commands.insert_resource(VoxelGridStorage(Arc::new(buffer)));
 
-    let uniform = CameraData {
-        camera_matrix: Mat4::default(),
-        inverse_perspective_matrix: Mat4::default(),
-    };
+    let uniform = PlayerData::default();
 
     commands.insert_resource(uniform);
 
@@ -155,7 +155,7 @@ fn setup(
         ..default()
     });
 
-    commands.insert_resource(RaycastImage(image));
+    commands.insert_resource(RaycastOutputImage(image));
 
     commands.spawn(Camera2dBundle::default());
 }
@@ -173,18 +173,33 @@ fn create_perspective_projection_matrix(aspect_ratio : f32, fov : f32, near : f3
     );
 }
 
-fn update_camera_gpu(
-    mut uniform_data: ResMut<CameraData>,
+fn update_player_uniform(
+    mut uniform_data: ResMut<PlayerData>,
     transform_query: Query<&Transform, With<FlyCam>>,
+    mouse_input: Res<Input<MouseButton>>,
 ) {
     if let Ok(transform) = transform_query.get_single() {
         uniform_data.camera_matrix = transform.compute_matrix();
         let perspective_matrix = create_perspective_projection_matrix(16.0 / 9.0, 60.0, 0.1, 1000.0);
         uniform_data.inverse_perspective_matrix = perspective_matrix.inverse();
     }
+    let mut mouse_buttons = 0u32;
+    if mouse_input.pressed(MouseButton::Left) {
+        mouse_buttons |= 1;
+    }
+    if mouse_input.pressed(MouseButton::Middle) {
+        mouse_buttons |= 1 << 1;
+    }
+    if mouse_input.pressed(MouseButton::Right) {
+        mouse_buttons |= 1 << 2;
+    }
+    uniform_data.mouse_click = mouse_buttons;
+
+    uniform_data.brush_size = 3;
+
 }
 
-fn update_physics_gpu(
+fn update_physics_uniform(
     mut uniform_data: ResMut<PhysicsData>,
     time: Res<Time>
 ) {
@@ -192,19 +207,19 @@ fn update_physics_gpu(
     uniform_data.delta_seconds = time.delta_seconds();
 }
 
-fn prepare_uniform_data(
+fn write_uniform_buffers(
     mut commands: Commands,
-    camera_data: ResMut<CameraData>,
+    camera_data: ResMut<PlayerData>,
     physics_data: ResMut<PhysicsData>,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
 ) {
     // camera data
     {
-        let mut buffer = UniformBuffer::<CameraData>::from(camera_data.clone());
+        let mut buffer = UniformBuffer::<PlayerData>::from(camera_data.clone());
         buffer.write_buffer(&render_device, &render_queue);
 
-        commands.insert_resource(VoxelGridUniform(buffer));
+        commands.insert_resource(PlayerDataUniform(buffer));
     }
 
     // physics data
@@ -212,7 +227,7 @@ fn prepare_uniform_data(
         let mut buffer = UniformBuffer::<PhysicsData>::from(physics_data.clone());
         buffer.write_buffer(&render_device, &render_queue);
 
-        commands.insert_resource(PhysicsUniform(buffer));
+        commands.insert_resource(PhysicsDataUniform(buffer));
     }
 }
 
@@ -330,9 +345,9 @@ fn queue_bind_group(
     pipeline: Res<ComputePipeline>,
     gpu_images: Res<RenderAssets<Image>>,
     voxel_grid: Res<VoxelGridStorage>,
-    camera_data: Res<VoxelGridUniform>,
-    physics_data: Res<PhysicsUniform>,
-    raycast_image: Res<RaycastImage>,
+    camera_data: Res<PlayerDataUniform>,
+    physics_data: Res<PhysicsDataUniform>,
+    raycast_image: Res<RaycastOutputImage>,
     render_device: Res<RenderDevice>,
 ) {
     // Bind the voxel data as a storage buffer

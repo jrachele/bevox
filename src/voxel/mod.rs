@@ -36,6 +36,8 @@ impl Voxel {
 pub struct VoxelGrid {
     dim: u32,
     pub pos: Vec3,
+    selected: Vec3,
+    normal: Vec3,
     #[size(runtime)]
     voxels: Vec<Voxel>,
 }
@@ -45,6 +47,8 @@ impl VoxelGrid {
         Self {
             dim,
             pos,
+            normal: Vec3::new(0.0, 0.0, 0.0),
+            selected: Vec3::new(-1.0, -1.0, -1.0),
             voxels: vec![Voxel::default(); (dim*dim*dim) as usize],
         }
 	}

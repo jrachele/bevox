@@ -1,15 +1,8 @@
 #import "shaders/voxel.wgsl"
-
-@group(0) @binding(1)
-var<uniform> camera_data: CameraData;
+#import "shaders/player.wgsl"
 
 @group(1) @binding(0)
 var output_texture: texture_storage_2d<rgba8unorm, read_write>;
-
-struct CameraData {
-    camera_matrix: mat4x4<f32>,
-    inverse_projection_matrix: mat4x4<f32>,
-}
 
 @compute @workgroup_size(8, 8, 1)
 fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
@@ -17,8 +10,8 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
     let grid_pos = voxel_grid.pos;
     let pixel_coords = invocation_id.xy;
 
-    let camera_matrix = camera_data.camera_matrix;
-    let inverse_projection_matrix = camera_data.inverse_projection_matrix;
+    let camera_matrix = player_data.camera_matrix;
+    let inverse_projection_matrix = player_data.inverse_projection_matrix;
 
     let screen_size = vec2<f32>(textureDimensions(output_texture));
     let ndc_space = ((vec2<f32>(f32(pixel_coords.x), screen_size.y - f32(pixel_coords.y)) / screen_size) * 2.0) - vec2<f32>(1.0);
@@ -37,19 +30,19 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
     if (voxel_position.x < boundary_bottom_left.x) {
         voxel_position.x = boundary_bottom_left.x;
     }
-    if (voxel_position.x > boundary_top_right.x) {
+    if (voxel_position.x >= boundary_top_right.x) {
         voxel_position.x = boundary_top_right.x;
     }
     if (voxel_position.y < boundary_bottom_left.y) {
         voxel_position.y = boundary_bottom_left.y;
     }
-    if (voxel_position.y > boundary_top_right.y) {
+    if (voxel_position.y >= boundary_top_right.y) {
         voxel_position.y = boundary_top_right.y;
     }
     if (voxel_position.z < boundary_bottom_left.z) {
         voxel_position.z = boundary_bottom_left.z;
     }
-    if (voxel_position.z > boundary_top_right.z) {
+    if (voxel_position.z >= boundary_top_right.z) {
         voxel_position.z = boundary_top_right.z;
     }
 
@@ -63,6 +56,7 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
     var color = vec4<f32>(0.0);
     let maxSteps = u32(dim * 2.0);
     var mask = vec3<bool>(false);
+    let center_pixel = ndc_space.x == 0.0 && ndc_space.y == 0.0;
     for (var i = 0u; i < maxSteps; i++) {
         let index = vec3<f32>((voxel_position-grid_pos) / VOXEL_SIZE);
         let flat_index = (index.x * dim * dim) + (index.y * dim) + index.z;
@@ -70,9 +64,12 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
         if (voxel > 0u) {
             color = vec4<f32>(0.5, 0.3, 0.1, 1.0);
 
-            // Show indicator for the middle pixel
             // TODO: Store index in read_write buffer for brush
-            if (ndc_space.x == 0.0 && ndc_space.y == 0.0) {
+            if (center_pixel) {
+                voxel_grid.selected = index;
+            }
+
+            if (voxel_grid.selected.x == index.x && voxel_grid.selected.y == index.y && voxel_grid.selected.z == index.z) {
                 color = vec4<f32>(1.0, 1.0, 1.0, 1.0);
             }
             break;
@@ -105,14 +102,25 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
             voxel_position.z < boundary_bottom_left.z || voxel_position.z > boundary_top_right.z) {
             break;
         }
-
-
     }
     if (mask.y) {
         color *= 0.5;
     }
     if (mask.z) {
         color *= 0.75;
+    }
+
+    // TODO: Maybe calculate normals some other way later?
+    if (center_pixel) {
+        if (mask.x) {
+            voxel_grid.normal.x = 1.0;
+        }
+        else if (mask.y) {
+            voxel_grid.normal.y = 1.0;
+        }
+        else if (mask.z) {
+            voxel_grid.normal.z = 1.0;
+        }
     }
 
     textureStore(output_texture, invocation_id.xy, color);
