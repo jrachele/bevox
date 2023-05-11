@@ -86,7 +86,7 @@ fn initial_grab_cursor(mut primary_window: Query<&mut Window, With<PrimaryWindow
 /// Spawns the `Camera3dBundle` to be controlled
 fn setup_player(mut commands: Commands) {
     commands.spawn((
-        Transform::from_xyz(-2.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(-2.0, 0.0, 5.0).looking_at(Vec3::new(20.0, 20.0, 20.0), Vec3::Y),
         FlyCam,
     ));
 }
