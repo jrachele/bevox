@@ -59,16 +59,15 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
     let center_pixel = ndc_space.x == 0.0 && ndc_space.y == 0.0;
     for (var i = 0u; i < maxSteps; i++) {
         let index = vec3<f32>((voxel_position-grid_pos) / VOXEL_SIZE);
-        let flat_index = (index.x * dim * dim) + (index.y * dim) + index.z;
-        let voxel = voxel_grid.voxels[u32(flat_index)];
-        if (voxel > 0u) {
-            color = vec4<f32>(0.5, 0.3, 0.1, 1.0);
+        var voxel = EMPTY_VOXEL;
+        if (get_voxel(vec3<i32>(index), &voxel) && voxel != EMPTY_VOXEL) {
+            color = vec4<f32>(get_voxel_color(voxel), 1.0);
 
-            // TODO: Store index in read_write buffer for brush
             if (center_pixel) {
                 voxel_grid.selected = index;
             }
 
+            // TODO: Render brush as sphere with radius, in separate function
             if (voxel_grid.selected.x == index.x && voxel_grid.selected.y == index.y && voxel_grid.selected.z == index.z) {
                 color = vec4<f32>(1.0, 1.0, 1.0, 1.0);
             }
@@ -104,22 +103,22 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
         }
     }
     if (mask.y) {
-        color *= 0.5;
+        color *= 0.9;
     }
     if (mask.z) {
         color *= 0.75;
     }
 
-    // TODO: Maybe calculate normals some other way later?
     if (center_pixel) {
+        voxel_grid.normal = vec3<f32>(0.0);
         if (mask.x) {
-            voxel_grid.normal.x = 1.0;
+            voxel_grid.normal.x = -sign(ray_direction.x);
         }
         else if (mask.y) {
-            voxel_grid.normal.y = 1.0;
+            voxel_grid.normal.y = -sign(ray_direction.y);
         }
         else if (mask.z) {
-            voxel_grid.normal.z = 1.0;
+            voxel_grid.normal.z = -sign(ray_direction.z);
         }
     }
 

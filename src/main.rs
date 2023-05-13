@@ -2,6 +2,7 @@ use bevy::{
     prelude::*,
     diagnostic::{LogDiagnosticsPlugin, FrameTimeDiagnosticsPlugin}, window::PresentMode,
 };
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use util::flycam::{PlayerPlugin, MovementSettings, KeyBindings, FlyCam};
 use render::RenderComputePlugin;
 
@@ -39,6 +40,7 @@ fn main() {
             ..Default::default()
         })
         .add_plugin(RenderComputePlugin)
+        .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(LogDiagnosticsPlugin::default())
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .run();

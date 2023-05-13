@@ -1,31 +1,30 @@
 fn handle_sand(index: vec3<i32>) {
-    let current_voxel = voxel_grid.voxels[get_index(index)];
-    let below_block = vec3<i32>(index.x, index.y - 1, index.z);
-
-    let dim = i32(voxel_grid.dim);
-    if (index.y <= 1 || index.y >= dim) {
+    var current_voxel = EMPTY_VOXEL;
+    if (!get_voxel(index, &current_voxel) || current_voxel == EMPTY_VOXEL) {
         return;
     }
+    let below_block_index = vec3<i32>(index.x, index.y - 1, index.z);
+
+    let dim = i32(voxel_grid.dim);
+
     // First check if we can go straight down
-    if (voxel_grid.voxels[get_index(below_block)] == 0u) {
-        voxel_grid.voxels[get_index(index)] = 0u;
-        voxel_grid.voxels[get_index(below_block)] = current_voxel;
+    var below_block = EMPTY_VOXEL;
+    if (get_voxel(below_block_index, &below_block) && below_block == EMPTY_VOXEL) {
+        set_voxel(index, EMPTY_VOXEL);
+        set_voxel(below_block_index, current_voxel);
+    }
     // If not check if we can go anywhere in the 3x3 blocks surrounding the current block, underneath it
-    } else {
+    else {
         for (var i = -1; i <= 1; i++) {
             let left_index = index.x + i;
-            if (left_index <= 0 || left_index >= dim - 1) {
-                continue;
-            }
             for (var k = -1; k <= 1; k++) {
                 let right_index = index.z + k;
-                if (right_index <= 0 || right_index >= dim - 1) {
-                    continue;
-                }
-                let block_index = vec3<i32>(left_index, index.y - 1, right_index);
-                if (voxel_grid.voxels[get_index(block_index)] == 0u) {
-                    voxel_grid.voxels[get_index(index)] = 0u;
-                    voxel_grid.voxels[get_index(block_index)] = current_voxel;
+                let clumpiness = 2;
+                let side_block_index = vec3<i32>(left_index, index.y - clumpiness, right_index);
+                var side_block = EMPTY_VOXEL;
+                if (get_voxel(side_block_index, &side_block) && side_block == EMPTY_VOXEL) {
+                    set_voxel(index, EMPTY_VOXEL);
+                    set_voxel(side_block_index, current_voxel);
                     return;
                 }
             }

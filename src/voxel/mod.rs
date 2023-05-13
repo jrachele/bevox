@@ -10,26 +10,42 @@ pub enum VoxelType {
 
 #[derive(Clone, Copy, Debug, Default, ShaderType)]
 pub struct Voxel {
-    pub value: u32
+    value: u32
 }
 
 impl Voxel {
-    fn get_color(&self) -> (f32, f32, f32) {
-        //
-        let voxel_type_num = self.value >> 16;
-        let voxel_type = match voxel_type_num {
-            0 => VoxelType::Grass,
-            _ => VoxelType::Dirt,
-        };
-        Self::color_from_voxel_type(voxel_type)
+    pub fn get_color(&self) -> Vec3 {
+        let voxel_data = self.value;
+        let mask_5 = 31;
+        let mask_6 = 63;
+        let r_offset = 32 - 5;
+        let g_offset = 32 - 11;
+        let b_offset = 32 - 16;
+        let r: u32 = (voxel_data & (mask_5 << r_offset)) >> r_offset;
+        let g: u32 = (voxel_data & (mask_6 << g_offset)) >> g_offset;
+        let b: u32 = (voxel_data & (mask_5 << b_offset)) >> b_offset;
+        Vec3::new(r as f32 / mask_5 as f32, g as f32 / mask_6 as f32, b as f32 / mask_5 as f32)
     }
 
-    fn color_from_voxel_type(voxel_type: VoxelType) -> (f32, f32, f32) {
-        match voxel_type {
-            VoxelType::Grass => (0.0, 0.9, 0.1),
-            VoxelType::Dirt => (0.7, 0.3, 0.1),
-        }
+    pub fn set_color(&mut self, color: Vec3) {
+        let r: u32 = (color.x.abs() * 31.0) as u32;
+        let g: u32 = (color.y.abs() * 63.0) as u32;
+        let b: u32 = (color.z.abs() * 31.0) as u32;
+        self.value |= r << (32 - 5);
+        self.value |= g << (32 - 11);
+        self.value |= b << (32 - 16);
     }
+
+    pub fn get_voxel_type(&self) -> u32 {
+        return self.value & 255;
+    }
+
+    pub fn set_voxel_type(&mut self, voxel_type: u32) {
+        self.value >>= 8;
+        self.value <<= 8;
+        self.value |= voxel_type & 255;
+    }
+
 }
 
 #[derive(Clone, Debug, Default, ShaderType)]

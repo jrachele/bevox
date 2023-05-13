@@ -10,6 +10,8 @@ use bevy::render::renderer::{RenderDevice, RenderQueue, RenderContext};
 use bevy::render::{RenderApp, RenderSet};
 use bevy::render::extract_resource::{ExtractResourcePlugin, ExtractResource};
 
+use rand::Rng;
+
 use crate::util::flycam::FlyCam;
 use crate::voxel::VoxelGrid;
 
@@ -21,20 +23,29 @@ struct PlayerData {
     brush_size: u32,
 }
 
-#[derive(Resource, Default, Clone, ShaderType, ExtractResource)]
-struct PhysicsData {
-    time: f32,
-    delta_seconds: f32,
-}
-
 #[derive(Resource, Clone, ExtractResource)]
 struct VoxelGridStorage(Arc<StorageBuffer<VoxelGrid>>);
 
 #[derive(Resource)]
 struct PlayerDataUniform(UniformBuffer<PlayerData>);
 
-#[derive(Resource)]
-struct PhysicsDataUniform(UniformBuffer<PhysicsData>);
+#[derive(Resource, Clone, ExtractResource)]
+struct PhysicsTimer {
+    elapsed_time: f32,
+    trigger_time: f32,
+}
+
+impl PhysicsTimer {
+    fn triggered(&self) -> bool {
+        self.elapsed_time >= self.trigger_time
+    }
+    fn reset(&mut self) {
+        self.elapsed_time = 0.0;
+    }
+    fn tick(&mut self, amount: f32) {
+        self.elapsed_time += amount;
+    }
+}
 
 #[derive(Resource, Clone, Deref, ExtractResource)]
 struct RaycastOutputImage(Handle<Image>);
@@ -52,7 +63,6 @@ struct RaycastImageBindGroup(BindGroup);
 #[derive(Resource)]
 pub struct ComputePipeline {
     voxel_data_bind_group_layout: BindGroupLayout,
-    physics_data_bind_group_layout: BindGroupLayout,
     texture_bind_group_layout: BindGroupLayout,
     compute_physics: CachedComputePipelineId,
     compute_raycast: CachedComputePipelineId,
@@ -64,17 +74,18 @@ impl Plugin for RenderComputePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(ExtractResourcePlugin::<VoxelGridStorage>::default());
         app.add_plugin(ExtractResourcePlugin::<PlayerData>::default());
-        app.add_plugin(ExtractResourcePlugin::<PhysicsData>::default());
+        app.add_plugin(ExtractResourcePlugin::<PhysicsTimer>::default());
         app.add_plugin(ExtractResourcePlugin::<RaycastOutputImage>::default());
 
         app.add_startup_system(setup);
         app.add_system(update_player_uniform);
-        app.add_system(update_physics_uniform);
+        app.add_system(update_physics_timer);
         // app.register_type::<VoxelGrid>();
         let render_app = app.sub_app_mut(RenderApp);
         render_app
             .init_resource::<ComputePipeline>()
             .add_system(write_uniform_buffers.in_set(RenderSet::Prepare))
+            // .add_system(update_physics_timer.in_set(RenderSet::Prepare))
             .add_system(queue_bind_group.in_set(RenderSet::Queue));
 
         let mut render_graph = render_app.world.resource_mut::<RenderGraph>();
@@ -103,6 +114,8 @@ fn setup(
     let r = (n - 1) as f32;
     let mut voxels = VoxelGrid::new(n, pos);
 
+    let mut rng = rand::thread_rng();
+
     // Create a sphere for testing purposes
     for i in 0..n {
         for j in 0..n {
@@ -111,7 +124,11 @@ fn setup(
                 let in_sphere = pos.length_squared() <= r * r;
                 if let Some(mut voxel) = voxels.get_mut(i, j, k) {
                     if in_sphere {
-                        voxel.value = 1;
+                        // For now just use sand and add nice variance
+                        // TODO: Add model loading
+                        let variance_x = rng.gen_range(-0.05..0.05);
+                        let sand_color = Vec3::new(0.5 + variance_x, 0.3 - variance_x,  0.1);
+                        voxel.set_color(sand_color);
                     }
                 }
             }
@@ -124,12 +141,16 @@ fn setup(
 
     commands.insert_resource(VoxelGridStorage(Arc::new(buffer)));
 
+    // Create a uniform buffer for dynamic data like camera position, brush size, and mouse clicking
     let uniform = PlayerData::default();
-
     commands.insert_resource(uniform);
 
-    let physics_uniform = PhysicsData::default();
-    commands.insert_resource(physics_uniform);
+    // Set up a timer to compute physics at a fixed interval
+    let physics_timer = PhysicsTimer {
+        elapsed_time: 0.0,
+        trigger_time: 1.0 / 30.0
+    };
+    commands.insert_resource(physics_timer);
 
     // Create the 2D texture buffer to render the results of the raycast
     let mut image = Image::new_fill(
@@ -199,35 +220,30 @@ fn update_player_uniform(
 
 }
 
-fn update_physics_uniform(
-    mut uniform_data: ResMut<PhysicsData>,
+fn update_physics_timer(
+    mut physics_timer: ResMut<PhysicsTimer>,
     time: Res<Time>
 ) {
-    uniform_data.time = time.elapsed_seconds();
-    uniform_data.delta_seconds = time.delta_seconds();
+    // If the timer was triggered, reset it
+    if physics_timer.triggered() {
+        physics_timer.reset();
+    }
+
+    physics_timer.tick(time.delta_seconds());
 }
 
 fn write_uniform_buffers(
     mut commands: Commands,
     camera_data: ResMut<PlayerData>,
-    physics_data: ResMut<PhysicsData>,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
 ) {
-    // camera data
+    // player data
     {
         let mut buffer = UniformBuffer::<PlayerData>::from(camera_data.clone());
         buffer.write_buffer(&render_device, &render_queue);
 
         commands.insert_resource(PlayerDataUniform(buffer));
-    }
-
-    // physics data
-    {
-        let mut buffer = UniformBuffer::<PhysicsData>::from(physics_data.clone());
-        buffer.write_buffer(&render_device, &render_queue);
-
-        commands.insert_resource(PhysicsDataUniform(buffer));
     }
 }
 
@@ -244,7 +260,6 @@ impl FromWorld for ComputePipeline {
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
-                            // min_binding_size: NonZeroU64::new(VOXEL_BUFFER_SIZE as u64),
                             min_binding_size: None,
                         },
                         count: None,
@@ -255,25 +270,6 @@ impl FromWorld for ComputePipeline {
                         ty: BindingType::Buffer {
                             ty: BufferBindingType::Uniform,
                             has_dynamic_offset: false,
-                            // min_binding_size: NonZeroU64::new(VOXEL_BUFFER_SIZE as u64),
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-        let physics_data_bind_group_layout = world
-            .resource::<RenderDevice>()
-            .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: None,
-                entries: &[
-                    BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::COMPUTE,
-                        ty: BindingType::Buffer {
-                            ty: BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            // min_binding_size: NonZeroU64::new(VOXEL_BUFFER_SIZE as u64),
                             min_binding_size: None,
                         },
                         count: None,
@@ -311,7 +307,6 @@ impl FromWorld for ComputePipeline {
             label: None,
             layout: vec![
                 voxel_data_bind_group_layout.clone(),
-                physics_data_bind_group_layout.clone()
             ],
             push_constant_ranges: Vec::new(),
             shader: physics_shader,
@@ -332,7 +327,6 @@ impl FromWorld for ComputePipeline {
 
         ComputePipeline {
             voxel_data_bind_group_layout,
-            physics_data_bind_group_layout,
             texture_bind_group_layout,
             compute_raycast,
             compute_physics,
@@ -346,7 +340,6 @@ fn queue_bind_group(
     gpu_images: Res<RenderAssets<Image>>,
     voxel_grid: Res<VoxelGridStorage>,
     camera_data: Res<PlayerDataUniform>,
-    physics_data: Res<PhysicsDataUniform>,
     raycast_image: Res<RaycastOutputImage>,
     render_device: Res<RenderDevice>,
 ) {
@@ -360,7 +353,6 @@ fn queue_bind_group(
                 resource: BindingResource::Buffer(BufferBinding {
                     buffer: &voxel_grid.0.buffer().unwrap(),
                     offset: 0,
-                    // size: NonZeroU64::new(VOXEL_BUFFER_SIZE as u64),
                     size: None,
                 }),
             },
@@ -379,26 +371,6 @@ fn queue_bind_group(
         commands.insert_resource(VoxelGridStorageBindGroup(bind_group));
     }
 
-    // Bind the physics data as a uniform
-    {
-        let bind_group = render_device.create_bind_group(&BindGroupDescriptor {
-            label: None,
-            layout: &pipeline.physics_data_bind_group_layout,
-            entries: &[
-            BindGroupEntry {
-                binding: 0,
-                resource: BindingResource::Buffer(BufferBinding {
-                    buffer: &physics_data.0.buffer().unwrap(),
-                    offset: 0,
-                    // size: NonZeroU64::new(VOXEL_BUFFER_SIZE as u64),
-                    size: None,
-                }),
-            },
-
-            ],
-        });
-        commands.insert_resource(PhysicsUniformBindGroup(bind_group));
-    }
     // Bind the raycast result image as a texture
     {
         let view = &gpu_images[&raycast_image.0];
@@ -426,29 +398,24 @@ impl render_graph::Node for RayCastRenderNode {
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
         let voxel_data_bind_group = &world.resource::<VoxelGridStorageBindGroup>().0;
-        let physics_data_bind_group = &world.resource::<PhysicsUniformBindGroup>().0;
         let texture_bind_group = &world.resource::<RaycastImageBindGroup>().0;
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<ComputePipeline>();
+        let physics_timer = world.resource::<PhysicsTimer>();
 
         // physics pass
-        // let time = world.resource::<Time>();
-        // if time.elapsed_seconds_wrapped() % 0.5 < 0.1 {
-        {
+        if physics_timer.triggered() {
             let mut pass = render_context
                 .command_encoder()
                 .begin_compute_pass(&ComputePassDescriptor::default());
 
             pass.set_bind_group(0, voxel_data_bind_group, &[]);
-            pass.set_bind_group(1, physics_data_bind_group, &[]);
 
             let compute_physics = pipeline_cache
                 .get_compute_pipeline(pipeline.compute_physics)
                 .unwrap();
             pass.set_pipeline(compute_physics);
-
             pass.dispatch_workgroups(VOXEL_GRID_SIZE / WORKGROUP_SIZE, VOXEL_GRID_SIZE / WORKGROUP_SIZE, VOXEL_GRID_SIZE / WORKGROUP_SIZE);
-            // pass.dispatch_workgroups(1, 1, 1);
         }
 
         // raycast pass
@@ -464,7 +431,6 @@ impl render_graph::Node for RayCastRenderNode {
                 .get_compute_pipeline(pipeline.compute_raycast)
                 .unwrap();
             pass.set_pipeline(compute_raycast);
-            // Dispatch n number of threads to take this shit down
             pass.dispatch_workgroups(SCREEN_SIZE.0 / WORKGROUP_SIZE, SCREEN_SIZE.1 / WORKGROUP_SIZE, 1);
         }
 

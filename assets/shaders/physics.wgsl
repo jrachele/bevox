@@ -9,26 +9,18 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(num_
     handle_voxel_physics(index, voxel_grid.voxels[get_index(index)]);
 
     // TODO: Move brush manipulation to a separate shader
+    var selected = vec3<i32>(voxel_grid.selected);
     if ((player_data.mouse_click & 1u) == 1u) {
         // Left click
-        let selected = voxel_grid.selected;
-        voxel_grid.voxels[get_index(vec3<i32>(selected))] = 0u;
+        set_voxel(selected, EMPTY_VOXEL);
     }
     if (((player_data.mouse_click >> 1u) & 1u) == 1u) {
         // Middle click
-        let selected = voxel_grid.selected;
-        voxel_grid.voxels[get_index(vec3<i32>(selected))] = 0u;
     }
     if (((player_data.mouse_click >> 2u) & 1u) == 1u) {
         // Right click
-        var selected = voxel_grid.selected;
-        var normal = voxel_grid.normal;
-        normal.y *= -1.0;
-        selected = selected - normal;
-        // TODO: Use sign of difference between camera position w1 w2 w3 -> x y z
-        // to determine where the block should be placed given normals
-        if (!is_out_of_bounds(vec3<i32>(selected))) {
-            voxel_grid.voxels[get_index(vec3<i32>(selected))] = 1u;
-        }
+        var normal = vec3<i32>(voxel_grid.normal);
+        selected = selected + normal;
+        set_voxel(selected, 1u << 9u);
     }
 }
