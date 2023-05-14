@@ -15,12 +15,15 @@ mod render;
 
 fn main() {
     App::new()
+        // .insert_resource(ClearColor(Color::rgb(0.4, 0.75, 0.9)))
+        .insert_resource(ClearColor(Color::rgb(0.0, 0.0, 0.0)))
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Voxel Engine".to_string(),
                 resolution: (1920., 1080.).into(),
                 resizable: false,
                 present_mode: PresentMode::AutoNoVsync,
+
                 ..default()
             }),
             ..default()
@@ -32,7 +35,7 @@ fn main() {
         .add_plugin(PlayerPlugin)
         .insert_resource(MovementSettings {
             sensitivity: 0.00015, // default: 0.00012
-            speed: 3.0, // default: 12.0
+            speed: 12.0, // default: 12.0
         })
         .insert_resource(KeyBindings {
             move_ascend: KeyCode::Space,

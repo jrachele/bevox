@@ -12,24 +12,6 @@ struct VoxelGrid {
 const VOXEL_SIZE: f32 = 1.0;
 const EMPTY_VOXEL: u32 = 0u;
 
-fn set_voxel(index: vec3<i32>, voxel: u32) -> bool {
-    if (is_out_of_bounds(index)) {
-        return false;
-    }
-
-    voxel_grid.voxels[get_index(index)] = voxel;
-    return true;
-}
-
-fn get_voxel(index: vec3<i32>, voxel: ptr<function, u32>) -> bool {
-    if (is_out_of_bounds(index)) {
-        return false;
-    }
-
-    *voxel = voxel_grid.voxels[get_index(index)];
-    return true;
-}
-
 fn get_index(index: vec3<i32>) -> u32 {
     let dim = i32(voxel_grid.dim);
     return u32((index.x * dim * dim) + (index.y * dim) + index.z);

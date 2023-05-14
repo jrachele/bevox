@@ -13,6 +13,7 @@ use bevy::render::extract_resource::{ExtractResourcePlugin, ExtractResource};
 use rand::Rng;
 
 use crate::util::flycam::FlyCam;
+use crate::util::*;
 use crate::voxel::VoxelGrid;
 
 #[derive(Resource, Default, Clone, ShaderType, ExtractResource)]
@@ -25,6 +26,9 @@ struct PlayerData {
 
 #[derive(Resource, Clone, ExtractResource)]
 struct VoxelGridStorage(Arc<StorageBuffer<VoxelGrid>>);
+
+#[derive(Resource, Clone, ExtractResource)]
+struct VoxelGridStorageDouble(Arc<StorageBuffer<VoxelGrid>>);
 
 #[derive(Resource)]
 struct PlayerDataUniform(UniformBuffer<PlayerData>);
@@ -58,13 +62,18 @@ struct PhysicsUniformBindGroup(BindGroup);
 struct VoxelGridStorageBindGroup(BindGroup);
 
 #[derive(Resource)]
+struct VoxelGridStorageDoubleBindGroup(BindGroup);
+
+#[derive(Resource)]
 struct RaycastImageBindGroup(BindGroup);
 
 #[derive(Resource)]
 pub struct ComputePipeline {
     voxel_data_bind_group_layout: BindGroupLayout,
+    physics_data_bind_group_layout: BindGroupLayout,
     texture_bind_group_layout: BindGroupLayout,
     compute_physics: CachedComputePipelineId,
+    compute_buffer_swap: CachedComputePipelineId,
     compute_raycast: CachedComputePipelineId,
 }
 
@@ -73,6 +82,7 @@ pub struct RenderComputePlugin;
 impl Plugin for RenderComputePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugin(ExtractResourcePlugin::<VoxelGridStorage>::default());
+        app.add_plugin(ExtractResourcePlugin::<VoxelGridStorageDouble>::default());
         app.add_plugin(ExtractResourcePlugin::<PlayerData>::default());
         app.add_plugin(ExtractResourcePlugin::<PhysicsTimer>::default());
         app.add_plugin(ExtractResourcePlugin::<RaycastOutputImage>::default());
@@ -123,23 +133,41 @@ fn setup(
                 let pos = (Vec3::new(i as f32, j as f32, k as f32) * 2.0) - Vec3::splat((n) as f32);
                 let in_sphere = pos.length_squared() <= r * r;
                 if let Some(mut voxel) = voxels.get_mut(i, j, k) {
-                    if in_sphere {
+                    // if in_sphere {
                         // For now just use sand and add nice variance
                         // TODO: Add model loading
-                        let variance_x = rng.gen_range(-0.05..0.05);
-                        let sand_color = Vec3::new(0.5 + variance_x, 0.3 - variance_x,  0.1);
-                        voxel.set_color(sand_color);
-                    }
+                        // let is_sand = rng.gen_bool(0.5);
+
+                        // if is_sand {
+                            let variance = rng.gen_range(-0.02..0.02);
+                            let sand_color = Vec3::new(0.5, 0.3,  0.1);
+                            let varied_sand = vary_color(sand_color, variance);
+                            voxel.set_color(varied_sand);
+                        // }
+                        // else {
+                            // let water_color = Vec3::new(0.3, 0.7, 0.9);
+                            // voxel.set_color(water_color);
+                            // voxel.set_voxel_type(1);
+                        // }
+                    // }
                 }
             }
         }
     }
 
     // Create a storage buffer containing our voxel data
-    let mut buffer = StorageBuffer::<VoxelGrid>::from(voxels);
+    let mut buffer = StorageBuffer::<VoxelGrid>::from(voxels.clone());
     buffer.write_buffer(&render_device, &render_queue);
 
     commands.insert_resource(VoxelGridStorage(Arc::new(buffer)));
+
+    {
+        // Create a double buffer for voxel data, for cellular automata
+        let mut buffer = StorageBuffer::<VoxelGrid>::from(voxels);
+        buffer.write_buffer(&render_device, &render_queue);
+
+        commands.insert_resource(VoxelGridStorageDouble(Arc::new(buffer)));
+    }
 
     // Create a uniform buffer for dynamic data like camera position, brush size, and mouse clicking
     let uniform = PlayerData::default();
@@ -173,6 +201,17 @@ fn setup(
             ..default()
         },
         texture: image.clone(),
+        ..default()
+    });
+
+    commands.spawn(SpriteBundle {
+        sprite: Sprite {
+            custom_size: Some(Vec2::new(SCREEN_SIZE.0 as f32, SCREEN_SIZE.1 as f32)),
+
+            ..default()
+        },
+        texture: image.clone(),
+
         ..default()
     });
 
@@ -276,6 +315,33 @@ impl FromWorld for ComputePipeline {
                     },
                 ],
             });
+        let physics_data_bind_group_layout = world
+            .resource::<RenderDevice>()
+            .create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::COMPUTE,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // BindGroupLayoutEntry {
+                    //     binding: 1,
+                    //     visibility: ShaderStages::COMPUTE,
+                    //     ty: BindingType::Buffer {
+                    //         ty: BufferBindingType::Uniform,
+                    //         has_dynamic_offset: false,
+                    //         min_binding_size: None,
+                    //     },
+                    //     count: None,
+                    // },
+                ],
+            });
         let texture_bind_group_layout =
             world
                 .resource::<RenderDevice>()
@@ -302,14 +368,29 @@ impl FromWorld for ComputePipeline {
         let physics_shader = world
             .resource::<AssetServer>()
             .load("shaders/physics.wgsl");
+        let buffer_swap_shader = world
+            .resource::<AssetServer>()
+            .load("shaders/buffer_swap.wgsl");
         let pipeline_cache = world.resource::<PipelineCache>();
         let compute_physics = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
             label: None,
             layout: vec![
                 voxel_data_bind_group_layout.clone(),
+                physics_data_bind_group_layout.clone(),
             ],
             push_constant_ranges: Vec::new(),
             shader: physics_shader,
+            shader_defs: vec![],
+            entry_point: Cow::from("update"),
+        });
+        let compute_buffer_swap = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+            label: None,
+            layout: vec![
+                voxel_data_bind_group_layout.clone(),
+                physics_data_bind_group_layout.clone(),
+            ],
+            push_constant_ranges: Vec::new(),
+            shader: buffer_swap_shader,
             shader_defs: vec![],
             entry_point: Cow::from("update"),
         });
@@ -327,9 +408,11 @@ impl FromWorld for ComputePipeline {
 
         ComputePipeline {
             voxel_data_bind_group_layout,
+            physics_data_bind_group_layout,
             texture_bind_group_layout,
             compute_raycast,
             compute_physics,
+            compute_buffer_swap,
         }
     }
 }
@@ -339,6 +422,7 @@ fn queue_bind_group(
     pipeline: Res<ComputePipeline>,
     gpu_images: Res<RenderAssets<Image>>,
     voxel_grid: Res<VoxelGridStorage>,
+    double_buffer: Res<VoxelGridStorageDouble>,
     camera_data: Res<PlayerDataUniform>,
     raycast_image: Res<RaycastOutputImage>,
     render_device: Res<RenderDevice>,
@@ -370,6 +454,24 @@ fn queue_bind_group(
         });
         commands.insert_resource(VoxelGridStorageBindGroup(bind_group));
     }
+    // Bind the double buffer of the voxel grid
+    {
+        let bind_group = render_device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout: &pipeline.physics_data_bind_group_layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: BindingResource::Buffer(BufferBinding {
+                    buffer: &double_buffer.0.buffer().unwrap(),
+                    offset: 0,
+                    size: None,
+                }),
+            },
+
+            ],
+        });
+        commands.insert_resource(VoxelGridStorageDoubleBindGroup(bind_group));
+    }
 
     // Bind the raycast result image as a texture
     {
@@ -398,6 +500,7 @@ impl render_graph::Node for RayCastRenderNode {
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
         let voxel_data_bind_group = &world.resource::<VoxelGridStorageBindGroup>().0;
+        let physics_data_bind_group = &world.resource::<VoxelGridStorageDoubleBindGroup>().0;
         let texture_bind_group = &world.resource::<RaycastImageBindGroup>().0;
         let pipeline_cache = world.resource::<PipelineCache>();
         let pipeline = world.resource::<ComputePipeline>();
@@ -405,17 +508,37 @@ impl render_graph::Node for RayCastRenderNode {
 
         // physics pass
         if physics_timer.triggered() {
-            let mut pass = render_context
-                .command_encoder()
-                .begin_compute_pass(&ComputePassDescriptor::default());
+            // First pass
+            {
+                let mut pass = render_context
+                    .command_encoder()
+                    .begin_compute_pass(&ComputePassDescriptor::default());
 
-            pass.set_bind_group(0, voxel_data_bind_group, &[]);
+                pass.set_bind_group(0, voxel_data_bind_group, &[]);
+                pass.set_bind_group(1, physics_data_bind_group, &[]);
 
-            let compute_physics = pipeline_cache
-                .get_compute_pipeline(pipeline.compute_physics)
-                .unwrap();
-            pass.set_pipeline(compute_physics);
-            pass.dispatch_workgroups(VOXEL_GRID_SIZE / WORKGROUP_SIZE, VOXEL_GRID_SIZE / WORKGROUP_SIZE, VOXEL_GRID_SIZE / WORKGROUP_SIZE);
+                let compute_physics = pipeline_cache
+                    .get_compute_pipeline(pipeline.compute_physics)
+                    .unwrap();
+                pass.set_pipeline(compute_physics);
+                pass.dispatch_workgroups(VOXEL_GRID_SIZE / WORKGROUP_SIZE, VOXEL_GRID_SIZE / WORKGROUP_SIZE, VOXEL_GRID_SIZE / WORKGROUP_SIZE);
+            }
+            // Swap pass
+            {
+                let mut pass = render_context
+                    .command_encoder()
+                    .begin_compute_pass(&ComputePassDescriptor::default());
+
+                pass.set_bind_group(0, voxel_data_bind_group, &[]);
+                pass.set_bind_group(1, physics_data_bind_group, &[]);
+
+                let compute_buffer_swap = pipeline_cache
+                    .get_compute_pipeline(pipeline.compute_buffer_swap)
+                    .unwrap();
+                pass.set_pipeline(compute_buffer_swap);
+                pass.dispatch_workgroups(VOXEL_GRID_SIZE / WORKGROUP_SIZE, VOXEL_GRID_SIZE / WORKGROUP_SIZE, VOXEL_GRID_SIZE / WORKGROUP_SIZE);
+            }
+
         }
 
         // raycast pass

@@ -59,16 +59,20 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
     let center_pixel = ndc_space.x == 0.0 && ndc_space.y == 0.0;
     for (var i = 0u; i < maxSteps; i++) {
         let index = vec3<f32>((voxel_position-grid_pos) / VOXEL_SIZE);
-        var voxel = EMPTY_VOXEL;
-        if (get_voxel(vec3<i32>(index), &voxel) && voxel != EMPTY_VOXEL) {
+        var voxel = voxel_grid.voxels[get_index(vec3<i32>(index))];
+        if (voxel != EMPTY_VOXEL) {
             color = vec4<f32>(get_voxel_color(voxel), 1.0);
+            if (get_voxel_type(voxel) == 1u) {
+                color.w = 0.1;
+            }
 
+            let center_voxel_already_selected = voxel_grid.selected.x == index.x && voxel_grid.selected.y == index.y && voxel_grid.selected.z == index.z;
             if (center_pixel) {
                 voxel_grid.selected = index;
             }
 
             // TODO: Render brush as sphere with radius, in separate function
-            if (voxel_grid.selected.x == index.x && voxel_grid.selected.y == index.y && voxel_grid.selected.z == index.z) {
+            if (center_voxel_already_selected) {
                 color = vec4<f32>(1.0, 1.0, 1.0, 1.0);
             }
             break;
@@ -108,6 +112,10 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
     if (mask.z) {
         color *= 0.75;
     }
+
+    // if (color.x != 0.0 || color.y != 0.0 || color.z != 0.0) {
+    //     color.w = 1.0;
+    // }
 
     if (center_pixel) {
         voxel_grid.normal = vec3<f32>(0.0);
