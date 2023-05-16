@@ -1,5 +1,6 @@
 #version 450
 
+// layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
 
 layout(set = 0, binding = 0) buffer VoxelInBuffer { uint voxels_in[]; };
@@ -16,6 +17,11 @@ bool set_voxel(ivec3 index, uint voxel_data) {
     if (out_of_bounds(index)) {
         return false;
     }
+
+    // Handle collisions: if there is already a block, don't move it
+    // if (voxels_out[get_index(index)] != EMPTY_VOXEL) {
+    //     return false;
+    // }
 
     voxels_out[get_index(index)] = voxel_data;
     // memoryBarrierShared();
@@ -48,4 +54,13 @@ const uint STAGE_SWAP = 1;
 void main() {
     ivec3 index = ivec3(gl_GlobalInvocationID);
     handle_voxel_physics(index, voxels_in[get_index(index)]);
+    // int dim = int(push_constants.dim);
+    // for (int i = 0; i < dim; i++) {
+    //     for (int j = 0; j < dim; j++) {
+    //         for (int k = 0; k < dim; k++) {
+    //             ivec3 index = ivec3(i, j, k);
+    //             handle_voxel_physics(index, voxels_in[get_index(index)]);
+    //         }
+    //     }
+    // }
 }

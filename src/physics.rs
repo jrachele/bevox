@@ -64,18 +64,19 @@ fn create_voxel_grid(memory_allocator: &Arc<StandardMemoryAllocator>,
                         // For now just use sand and add nice variance
                         // TODO: Add model loading
                         // let is_sand = rng.gen_bool(0.5);
+                        let is_sand = true;
 
-                        // if is_sand {
+                        if is_sand {
                             let variance = rng.gen_range(-0.02..0.02);
                             let sand_color = Vec3::new(0.5, 0.3,  0.1);
                             let varied_sand = vary_color(sand_color, variance);
                             voxel.set_color(varied_sand);
-                        // }
-                        // else {
-                            // let water_color = Vec3::new(0.3, 0.7, 0.9);
-                            // voxel.set_color(water_color);
-                            // voxel.set_voxel_type(1);
-                        // }
+                        }
+                        else {
+                            let water_color = Vec3::new(0.3, 0.7, 0.9);
+                            voxel.set_color(water_color);
+                            voxel.set_voxel_type(1);
+                        }
                     }
                 }
             }
@@ -197,15 +198,20 @@ impl PhysicsComputePipeline {
         self.dispatch(&mut builder);
 
         let command_buffer = builder.build().unwrap();
-        let finished = before_future
-            .then_execute(self.compute_queue.clone(), command_buffer)
+        // let finished = before_future
+        //     .then_execute(self.compute_queue.clone(), command_buffer)
+        //     .unwrap();
+        let finished = command_buffer
+            .execute(self.compute_queue.clone())
             .unwrap();
         let after_pipeline = finished.then_signal_fence_and_flush().unwrap();
 
         // std::mem::swap(&mut self.voxel_buffer, &mut self.voxel_buffer_dbl);
-        // after_pipeline.wait(None).unwrap();
+        after_pipeline.wait(None).unwrap();
 
-        self.swap_and_clean(after_pipeline.boxed())
+        let after_swap = self.swap_and_clean(after_pipeline.boxed());
+
+        before_future
         // after_pipeline.boxed()
     }
 
@@ -224,6 +230,8 @@ impl PhysicsComputePipeline {
         let copy_future = future.then_execute(self.compute_queue.clone(), command_buffer).unwrap().then_signal_fence_and_flush().unwrap();
 
         copy_future.boxed()
+        // copy_future.wait(None).unwrap();
+
         // let mut builder = AutoCommandBufferBuilder::primary(
         //     &self.command_buffer_allocator,
         //     self.compute_queue.queue_family_index(),
@@ -261,6 +269,8 @@ impl PhysicsComputePipeline {
             .bind_descriptor_sets(PipelineBindPoint::Compute, pipeline_layout.clone(), 0, set)
             .push_constants(pipeline_layout.clone(), 0, push_constants)
             .dispatch([VOXEL_GRID_DIM / 8, VOXEL_GRID_DIM / 8, VOXEL_GRID_DIM / 8])
+            // .dispatch([VOXEL_GRID_DIM, VOXEL_GRID_DIM, VOXEL_GRID_DIM])
+            // .dispatch([1, 1, 1])
             .unwrap();
     }
 }
