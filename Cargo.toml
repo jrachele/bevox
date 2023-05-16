@@ -6,8 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = "0.10.1"
 bevy-inspector-egui = "0.18.3"
+bevy_vulkano = {version="0.12.0", features = ["gui"]}
 bitfield = "0.14.0"
 bytemuck = "1.13.1"
 rand = "0.8.5"
+vulkano = "0.33.0"
+vulkano-shaders = "0.33.0"
+vulkano-util = "0.33.0"
+
+[dependencies.bevy]
+version = "0.10.1"
+default-features = false
+features = []

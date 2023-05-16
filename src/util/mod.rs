@@ -110,3 +110,17 @@ fn hsv_to_rgb(hsv: Vec3) -> Vec3 {
 
     rgb
 }
+
+pub fn create_perspective_projection_matrix(aspect_ratio : f32, fov : f32, near : f32, far : f32) -> Mat4 {
+    let tan_half_fov = f32::tan(fov * 0.5 * 3.14159265 / 180.0);
+    let sx = 1.0 / (aspect_ratio * tan_half_fov);
+    let sy = 1.0 / tan_half_fov;
+    let sz = -(far + near) / (far - near);
+    let pz = -(2.0 * far * near) / (far - near);
+    return Mat4::from_cols(
+        Vec4::new(sx, 0.0, 0.0, 0.0),
+        Vec4::new(0.0, sy, 0.0, 0.0),
+        Vec4::new(0.0, 0.0, sz, -1.0),
+        Vec4::new(0.0, 0.0, pz, 0.0),
+    );
+}
