@@ -1,8 +1,8 @@
 use bevy::{
     prelude::*,
-    diagnostic::{LogDiagnosticsPlugin, FrameTimeDiagnosticsPlugin}, window::PresentMode,
+    diagnostic::{LogDiagnosticsPlugin, FrameTimeDiagnosticsPlugin, Diagnostics}, window::PresentMode,
 };
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use bevy_inspector_egui::{quick::WorldInspectorPlugin, bevy_egui::EguiContexts, egui::{self, Ui}};
 use util::flycam::{PlayerPlugin, MovementSettings, KeyBindings, FlyCam};
 use render::RenderComputePlugin;
 
@@ -44,8 +44,35 @@ fn main() {
         })
         .add_plugin(RenderComputePlugin)
         .add_plugin(WorldInspectorPlugin::new())
-        .add_plugin(LogDiagnosticsPlugin::default())
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
+        .add_system(diagnostic_ui)
         .run();
 }
+/// Give our text a custom size
+fn sized_text(ui: &mut Ui, text: impl Into<String>, size: f32) {
+    ui.label(egui::RichText::new(text).size(size));
+}
 
+/// System to generate user interface with egui
+pub fn diagnostic_ui(
+    mut contexts: EguiContexts,
+    diagnostics: Res<Diagnostics>,
+    transform_query: Query<&Transform, With<FlyCam>>
+) {
+    let ctx = contexts.ctx_mut();
+    egui::Area::new("fps")
+        .fixed_pos(egui::pos2(10.0, 10.0))
+        .show(&ctx, |ui| {
+            let size = 15.0;
+            if let Some(diag) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+                if let Some(avg) = diag.average() {
+                    sized_text(ui, format!("FPS: {:.2}", avg), size);
+                }
+            }
+            if let Ok(transform) = transform_query.get_single() {
+                sized_text(ui,
+                           format!("x: {}, y: {}, z: {}", transform.translation.x, transform.translation.y, transform.translation.z),
+                           size);
+            }
+        });
+}

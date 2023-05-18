@@ -9,5 +9,4 @@ fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(num_
     let flat_index = get_index(index);
     let voxel = voxel_double_grid.voxels[flat_index];
     voxel_grid.voxels[flat_index] = voxel;
-    voxel_double_grid.voxels[flat_index] = 0u;
 }

@@ -522,6 +522,7 @@ impl render_graph::Node for RayCastRenderNode {
                     .unwrap();
                 pass.set_pipeline(compute_physics);
                 pass.dispatch_workgroups(VOXEL_GRID_SIZE / WORKGROUP_SIZE, VOXEL_GRID_SIZE / WORKGROUP_SIZE, VOXEL_GRID_SIZE / WORKGROUP_SIZE);
+                // pass.dispatch_workgroups(1, 1, 1);
             }
             // Swap pass
             {

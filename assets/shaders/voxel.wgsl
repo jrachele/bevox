@@ -17,11 +17,19 @@ fn get_index(index: vec3<i32>) -> u32 {
     return u32((index.x * dim * dim) + (index.y * dim) + index.z);
 }
 
-fn is_out_of_bounds(index: vec3<i32>) -> bool {
+fn out_of_bounds(index: vec3<i32>) -> bool {
     let dim = i32(voxel_grid.dim);
-    return index.x <= 0 || index.x >= dim ||
-        index.y <= 0 || index.y >= dim ||
-        index.z <= 0 || index.z >= dim;
+    return index.x < 0 || index.x >= dim ||
+        index.y < 0 || index.y >= dim ||
+        index.z < 0 || index.z >= dim;
+}
+
+// This may become useful sometime
+fn out_of_invocation_bounds(invocation_id: vec3<u32>, invocation_id_local: vec3<u32>, index: vec3<i32>) -> bool {
+    let boundary_bottom_left = vec3<i32>(invocation_id - invocation_id_local);
+    let boundary_top_right = boundary_bottom_left + vec3<i32>(8, 8, 8);
+    return index.x < boundary_bottom_left.x || index.y < boundary_bottom_left.y || index.z < boundary_bottom_left.z ||
+        index.x >= boundary_top_right.x || index.y >= boundary_top_right.y || index.z >= boundary_top_right.z;
 }
 
 fn get_voxel_color(voxel_data: u32) -> vec3<f32> {
@@ -87,7 +95,14 @@ fn hash(value: u32) -> u32 {
   return hashedValue;
 }
 
-fn randomFloat(value: u32) -> f32 {
+fn random_float(value: u32) -> f32 {
   var hashedValue: u32 = hash(value);
   return f32(hashedValue) / 4294967296.0;  // Divide by 2^32
+}
+
+fn random_int(value: u32, lower_bound: i32, upper_bound: i32) -> i32 {
+    let f = random_float(value);
+    let range = upper_bound - lower_bound + 1;
+    let adjusted = i32(f * f32(f)) % range; // % just in case, 1 / 2^32 chance its exactly 1.0
+    return adjusted + lower_bound;
 }
