@@ -20,7 +20,7 @@ fn ray_grid_intersection(ray_origin: vec3<f32>, ray_direction: vec3<f32>, grid_p
 }
 
 @compute @workgroup_size(8, 8, 1)
-fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
+fn main(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
     let dim = f32(voxel_grid.dim);
     let grid_pos = voxel_grid.pos;
     let pixel_coords = invocation_id.xy;

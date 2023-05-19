@@ -395,6 +395,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_app_compute"
+version = "0.10.3"
+dependencies = [
+ "bevy",
+ "bytemuck",
+ "codespan-reporting",
+ "futures-lite",
+ "parking_lot",
+ "wgpu",
+]
+
+[[package]]
 name = "bevy_asset"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3326,6 +3338,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy-inspector-egui",
+ "bevy_app_compute",
  "bitfield",
  "bytemuck",
  "rand",

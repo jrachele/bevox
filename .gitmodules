@@ -1,0 +1,3 @@
+[submodule "bevy_app_compute"]
+	path = bevy_app_compute
+	url = git@github.com:jrachele/bevy_app_compute.git

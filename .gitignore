@@ -1,0 +1,4 @@
+/target
+/.nvim
+.dir-locals.el
+*.sublime-workspace

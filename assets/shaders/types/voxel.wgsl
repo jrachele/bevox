@@ -1,6 +1,3 @@
-@group(0) @binding(0)
-var<storage, read_write> voxel_grid: VoxelGrid;
-
 struct VoxelGrid {
     dim: u32,
     pos: vec3<f32>,

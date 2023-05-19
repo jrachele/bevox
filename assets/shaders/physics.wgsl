@@ -1,19 +1,25 @@
 #import bevy_sprite::mesh2d_view_bindings
-#import "shaders/player.wgsl"
-#import "shaders/voxel.wgsl"
+#import "shaders/types/player.wgsl"
+#import "shaders/types/voxel.wgsl"
 
 #import "shaders/blocks/sand.wgsl"
 // #import "shaders/blocks/water.wgsl"
 
-@group(1) @binding(0)
+@group(0) @binding(0)
+var<storage, read_write> voxel_grid: VoxelGrid;
+
+@group(0) @binding(1)
 var<storage, read_write> voxel_grid_out: VoxelGrid;
+
+@group(0) @binding(2)
+var<uniform> player_data: PlayerData;
 
 const VOXEL_TYPE_SAND = 0u;
 const VOXEL_TYPE_WATER = 1u;
 
 @compute @workgroup_size(8, 8, 8)
 // @compute @workgroup_size(1, 1, 1)
-fn update(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(local_invocation_id) invocation_id_local: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>, @builtin(workgroup_id) workgroup_id: vec3<u32>) {
+fn main(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(local_invocation_id) invocation_id_local: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>, @builtin(workgroup_id) workgroup_id: vec3<u32>) {
     var index = vec3<i32>(invocation_id);
     handle_voxel_physics(index, voxel_grid.voxels[get_index(index)]);
     // for (var i = 0u; i < voxel_grid.dim; i++) {

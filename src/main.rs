@@ -2,9 +2,10 @@ use bevy::{
     prelude::*,
     diagnostic::{LogDiagnosticsPlugin, FrameTimeDiagnosticsPlugin, Diagnostics}, window::PresentMode,
 };
+use bevy_app_compute::prelude::{AppComputePlugin, AppComputeWorkerPlugin};
 use bevy_inspector_egui::{quick::WorldInspectorPlugin, bevy_egui::EguiContexts, egui::{self, Ui}};
 use util::flycam::{PlayerPlugin, MovementSettings, KeyBindings, FlyCam};
-use render::RenderComputePlugin;
+use render::{PhysicsComputeWorker};
 
 // #[cfg(test)]
 // mod tests;
@@ -42,7 +43,8 @@ fn main() {
             move_descend: KeyCode::LShift,
             ..Default::default()
         })
-        .add_plugin(RenderComputePlugin)
+        .add_plugin(AppComputePlugin)
+        // .add_plugin(AppComputeWorkerPlugin::<PhysicsComputeWorker>::default())
         .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_system(diagnostic_ui)
